@@ -1,0 +1,31 @@
+---
+
+# jenkins variables
+project_name: docker-requestrr
+external_type: github_stable
+release_type: stable
+release_tag: latest
+ls_branch: master
+repo_vars:
+  - EXT_GIT_BRANCH = 'master'
+  - EXT_USER = 'darkalfx'
+  - EXT_REPO = 'requestrr'
+  - BUILD_VERSION_ARG = 'REQUESTRR_VERSION'
+  - LS_USER = 'linuxserver'
+  - LS_REPO = 'docker-requestrr'
+  - CONTAINER_NAME = 'requestrr'
+  - DOCKERHUB_IMAGE = 'linuxserver/requestrr'
+  - DEV_DOCKERHUB_IMAGE = 'lsiodev/requestrr'
+  - PR_DOCKERHUB_IMAGE = 'lspipepr/requestrr'
+  - DIST_IMAGE = 'ubuntu'
+  - MULTIARCH='true'
+  - CI='true'
+  - CI_WEB='true'
+  - CI_PORT='4545'
+  - CI_SSL='false'
+  - CI_DELAY='120'
+  - CI_DOCKERENV='TZ=US/Pacific'
+  - CI_AUTH='user:password'
+  - CI_WEBPATH=''
+sponsor_links:
+  - { name: "Requestrr", url: "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=ELFGQ65FJFPVQ&currency_code=CAD&source=url" }

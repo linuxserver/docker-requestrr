@@ -1,0 +1,12 @@
+#!/usr/bin/with-contenv bash
+
+rm -rf \
+	/app/requestrr/bin/config
+
+ln -s \
+	/config \
+    /app/requestrr/bin/config
+
+# permissions
+chown -R abc:abc \
+	/config
