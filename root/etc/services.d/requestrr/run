@@ -1,0 +1,6 @@
+#!/usr/bin/with-contenv bash
+
+cd /app/requestrr/bin || exit 1
+
+exec \
+	s6-setuidgid abc /app/requestrr/bin/Requestrr.WebApi
