@@ -37,4 +37,5 @@ app_setup_block: |
 
 # changelog
 changelogs:
+  - { date: "27.09.21:", desc: "Allow app to write to tmp folder." }
   - { date: "21.02.21:", desc: "Initial Release." }

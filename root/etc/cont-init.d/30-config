@@ -1,12 +1,25 @@
 #!/usr/bin/with-contenv bash
 
+# symlink config
 rm -rf \
-	/app/requestrr/bin/config
+    /app/requestrr/bin/config
 
 ln -s \
-	/config \
+    /config \
     /app/requestrr/bin/config
+
+# symlink app tmp directory
+rm -rf \
+    /app/requestrr/bin/tmp
+
+mkdir -p \
+    /tmp/requestrr/tmp
+
+ln -s \
+    /tmp/requestrr/tmp \
+    /app/requestrr/bin/tmp
 
 # permissions
 chown -R abc:abc \
-	/config
+    /config \
+    /tmp/requestrr/tmp
