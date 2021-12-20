@@ -33,9 +33,13 @@ param_env_vars:
 # application setup block
 app_setup_block_enabled: true
 app_setup_block: |
+
+THIS IMAGE IS DEPRECATED.
+
   Access the webui at `<your-ip>:4545`, for more information check out [Requestrr]({{ project_url }}).
 
 # changelog
 changelogs:
+  - { date: "20.12.21:", desc: "Deprecated." }
   - { date: "27.09.21:", desc: "Allow app to write to tmp folder." }
   - { date: "21.02.21:", desc: "Initial Release." }
