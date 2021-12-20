@@ -59,6 +59,8 @@ The architectures supported by this image are:
 
 ## Application Setup
 
+THIS IMAGE IS DEPRECATED.
+
 Access the webui at `<your-ip>:4545`, for more information check out [Requestrr](https://github.com/darkalfx/requestrr).
 
 ## Usage
@@ -220,5 +222,6 @@ Once registered you can define the dockerfile to use with `-f Dockerfile.aarch64
 
 ## Versions
 
+* **20.12.21:** - Deprecated.
 * **27.09.21:** - Allow app to write to tmp folder.
 * **21.02.21:** - Initial Release.
