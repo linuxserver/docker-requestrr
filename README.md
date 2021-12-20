@@ -226,6 +226,6 @@ Once registered you can define the dockerfile to use with `-f Dockerfile.aarch64
 
 ## Versions
 
-* **25.03.22:** - Deprecate.
+* **20.12.21:** - Deprecate.
 * **27.09.21:** - Allow app to write to tmp folder.
 * **21.02.21:** - Initial Release.
