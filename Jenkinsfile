@@ -59,7 +59,7 @@ pipeline {
           env.CODE_URL = 'https://github.com/' + env.LS_USER + '/' + env.LS_REPO + '/commit/' + env.GIT_COMMIT
           env.DOCKERHUB_LINK = 'https://hub.docker.com/r/' + env.DOCKERHUB_IMAGE + '/tags/'
           env.PULL_REQUEST = env.CHANGE_ID
-          env.TEMPLATED_FILES = 'Jenkinsfile README.md LICENSE .editorconfig ./.github/CONTRIBUTING.md ./.github/FUNDING.yml ./.github/ISSUE_TEMPLATE/config.yml ./.github/ISSUE_TEMPLATE/issue.bug.md ./.github/ISSUE_TEMPLATE/issue.feature.md ./.github/PULL_REQUEST_TEMPLATE.md ./.github/workflows/external_trigger_scheduler.yml ./.github/workflows/greetings.yml ./.github/workflows/package_trigger_scheduler.yml ./.github/workflows/stale.yml ./.github/workflows/external_trigger.yml ./.github/workflows/package_trigger.yml ./root/donate.txt'
+          env.TEMPLATED_FILES = 'Jenkinsfile README.md LICENSE .editorconfig ./.github/CONTRIBUTING.md ./.github/FUNDING.yml ./.github/ISSUE_TEMPLATE/config.yml ./.github/ISSUE_TEMPLATE/issue.bug.md ./.github/ISSUE_TEMPLATE/issue.feature.md ./.github/PULL_REQUEST_TEMPLATE.md ./.github/workflows/external_trigger_scheduler.yml ./.github/workflows/greetings.yml ./.github/workflows/package_trigger_scheduler.yml ./.github/workflows/stale.yml ./.github/workflows/external_trigger.yml ./.github/workflows/package_trigger.yml ./root/donate.txt ./root/etc/cont-init.d/99-deprecation'
         }
         script{
           env.LS_RELEASE_NUMBER = sh(
@@ -128,12 +128,11 @@ pipeline {
             script: '''echo ${EXT_RELEASE} | sed 's/[~,%@+;:/]//g' ''',
             returnStdout: true).trim()
 
-          env.SEMVER = (new Date()).format('YYYY.MM.dd')
-          def semver = env.EXT_RELEASE_CLEAN =~ /(\d+)\.(\d+)\.(\d+)$/
+          def semver = env.EXT_RELEASE_CLEAN =~ /(\d+)\.(\d+)\.(\d+)/
           if (semver.find()) {
             env.SEMVER = "${semver[0][1]}.${semver[0][2]}.${semver[0][3]}"
           } else {
-            semver = env.EXT_RELEASE_CLEAN =~ /(\d+)\.(\d+)(?:\.(\d+))?(.*)$/
+            semver = env.EXT_RELEASE_CLEAN =~ /(\d+)\.(\d+)(?:\.(\d+))?(.*)/
             if (semver.find()) {
               if (semver[0][3]) {
                 env.SEMVER = "${semver[0][1]}.${semver[0][2]}.${semver[0][3]}"
@@ -143,7 +142,15 @@ pipeline {
             }
           }
 
-          println("SEMVER: ${env.SEMVER}")
+          if (env.SEMVER != null) {
+            if (BRANCH_NAME != "master" && BRANCH_NAME != "main") {
+              env.SEMVER = "${env.SEMVER}-${BRANCH_NAME}"
+            }
+            println("SEMVER: ${env.SEMVER}")
+          } else {
+            println("No SEMVER detected")
+          }
+
         }
       }
     }
@@ -315,6 +322,7 @@ pipeline {
                 cd ${TEMPDIR}/docker-${CONTAINER_NAME}
                 mkdir -p ${TEMPDIR}/repo/${LS_REPO}/.github/workflows
                 mkdir -p ${TEMPDIR}/repo/${LS_REPO}/.github/ISSUE_TEMPLATE
+                mkdir -p ${TEMPDIR}/repo/${LS_REPO}/root/etc/cont-init.d
                 cp --parents ${TEMPLATED_FILES} ${TEMPDIR}/repo/${LS_REPO}/ || :
                 cd ${TEMPDIR}/repo/${LS_REPO}/
                 if ! grep -q '.jenkins-external' .gitignore 2>/dev/null; then
@@ -322,6 +330,7 @@ pipeline {
                   git add .gitignore
                 fi
                 git add ${TEMPLATED_FILES}
+                git rm ${TEMPDIR}/repo/${LS_REPO}/.github/workflows/{external_trigger,external_trigger_scheduler,package_trigger,package_trigger_scheduler}.yml || :
                 git commit -m 'Bot Updating Templated Files'
                 git push https://LinuxServer-CI:${GITHUB_TOKEN}@github.com/${LS_USER}/${LS_REPO}.git --all
                 echo "true" > /tmp/${COMMIT_SHA}-${BUILD_NUMBER}
@@ -345,6 +354,10 @@ pipeline {
               fi
               if [[ ("${BRANCH_NAME}" == "master") || ("${BRANCH_NAME}" == "main") ]] && [[ (! -f ${TEMPDIR}/unraid/templates/unraid/${CONTAINER_NAME}.xml) || ("$(md5sum ${TEMPDIR}/unraid/templates/unraid/${CONTAINER_NAME}.xml | awk '{ print $1 }')" != "$(md5sum ${TEMPDIR}/docker-${CONTAINER_NAME}/.jenkins-external/${CONTAINER_NAME}.xml | awk '{ print $1 }')") ]]; then
                 cd ${TEMPDIR}/unraid/templates/
+                if ! grep -wq "${CONTAINER_NAME}" ${TEMPDIR}/unraid/templates/unraid/ignore.list; then
+                  echo "${CONTAINER_NAME}" >> ${TEMPDIR}/unraid/templates/unraid/ignore.list
+                  git add unraid/ignore.list
+                fi
                 if grep -wq "${CONTAINER_NAME}" ${TEMPDIR}/unraid/templates/unraid/ignore.list; then
                   echo "Image is on the ignore list, removing Unraid template"
                   git rm unraid/${CONTAINER_NAME}.xml || :
@@ -412,10 +425,10 @@ pipeline {
       steps{
         sh '''#! /bin/bash
               set -e
-              PACKAGE_UUID=$(curl -X GET -H "Authorization: Bearer ${SCARF_TOKEN}" https://scarf.sh/api/v1/packages | jq -r '.[] | select(.name=="linuxserver/requestrr") | .uuid')
+              PACKAGE_UUID=$(curl -X GET -H "Authorization: Bearer ${SCARF_TOKEN}" https://scarf.sh/api/v1/organizations/linuxserver-ci/packages | jq -r '.[] | select(.name=="linuxserver/requestrr") | .uuid')
               if [ -z "${PACKAGE_UUID}" ]; then
                 echo "Adding package to Scarf.sh"
-                PACKAGE_UUID=$(curl -sX POST https://scarf.sh/api/v1/packages \
+                curl -sX POST https://scarf.sh/api/v1/organizations/linuxserver-ci/packages \
                   -H "Authorization: Bearer ${SCARF_TOKEN}" \
                   -H "Content-Type: application/json" \
                   -d '{"name":"linuxserver/requestrr",\
@@ -423,22 +436,10 @@ pipeline {
                        "libraryType":"docker",\
                        "website":"https://github.com/linuxserver/docker-requestrr",\
                        "backendUrl":"https://ghcr.io/linuxserver/requestrr",\
-                       "publicUrl":"https://lscr.io/linuxserver/requestrr"}' \
-                  | jq -r .uuid)
+                       "publicUrl":"https://lscr.io/linuxserver/requestrr"}' || :
               else
                 echo "Package already exists on Scarf.sh"
               fi
-              echo "Setting permissions on Scarf.sh for package ${PACKAGE_UUID}"
-              curl -X POST https://scarf.sh/api/v1/packages/${PACKAGE_UUID}/permissions \
-                -H "Authorization: Bearer ${SCARF_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d '[{"userQuery":"Spad","permissionLevel":"admin"},\
-                     {"userQuery":"roxedus","permissionLevel":"admin"},\
-                     {"userQuery":"nemchik","permissionLevel":"admin"},\
-                     {"userQuery":"driz","permissionLevel":"admin"},\
-                     {"userQuery":"aptalca","permissionLevel":"admin"},\
-                     {"userQuery":"saarg","permissionLevel":"admin"},\
-                     {"userQuery":"Stark","permissionLevel":"admin"}]'
            '''
       } 
     }
@@ -762,11 +763,15 @@ pipeline {
                     docker tag ${IMAGE}:${META_TAG} ${PUSHIMAGE}:${META_TAG}
                     docker tag ${PUSHIMAGE}:${META_TAG} ${PUSHIMAGE}:latest
                     docker tag ${PUSHIMAGE}:${META_TAG} ${PUSHIMAGE}:${EXT_RELEASE_TAG}
-                    docker tag ${PUSHIMAGE}:${META_TAG} ${PUSHIMAGE}:${SEMVER}
+                    if [ -n "${SEMVER}" ]; then
+                      docker tag ${PUSHIMAGE}:${META_TAG} ${PUSHIMAGE}:${SEMVER}
+                    fi
                     docker push ${PUSHIMAGE}:latest
                     docker push ${PUSHIMAGE}:${META_TAG}
                     docker push ${PUSHIMAGE}:${EXT_RELEASE_TAG}
-                    docker push ${PUSHIMAGE}:${SEMVER}
+                    if [ -n "${SEMVER}" ]; then
+                     docker push ${PUSHIMAGE}:${SEMVER}
+                    fi
                   done
                '''
           }
@@ -775,8 +780,10 @@ pipeline {
                   docker rmi \
                   ${DELETEIMAGE}:${META_TAG} \
                   ${DELETEIMAGE}:${EXT_RELEASE_TAG} \
-                  ${DELETEIMAGE}:latest \
-                  ${DELETEIMAGE}:${SEMVER} || :
+                  ${DELETEIMAGE}:latest || :
+                  if [ -n "${SEMVER}" ]; then
+                    docker rmi ${DELETEIMAGE}:${SEMVER} || :
+                  fi
                 done
              '''
         }
@@ -826,9 +833,11 @@ pipeline {
                     docker tag ${MANIFESTIMAGE}:amd64-${META_TAG} ${MANIFESTIMAGE}:amd64-${EXT_RELEASE_TAG}
                     docker tag ${MANIFESTIMAGE}:arm32v7-${META_TAG} ${MANIFESTIMAGE}:arm32v7-${EXT_RELEASE_TAG}
                     docker tag ${MANIFESTIMAGE}:arm64v8-${META_TAG} ${MANIFESTIMAGE}:arm64v8-${EXT_RELEASE_TAG}
-                    docker tag ${MANIFESTIMAGE}:amd64-${META_TAG} ${MANIFESTIMAGE}:amd64-${SEMVER}
-                    docker tag ${MANIFESTIMAGE}:arm32v7-${META_TAG} ${MANIFESTIMAGE}:arm32v7-${SEMVER}
-                    docker tag ${MANIFESTIMAGE}:arm64v8-${META_TAG} ${MANIFESTIMAGE}:arm64v8-${SEMVER}
+                    if [ -n "${SEMVER}" ]; then
+                      docker tag ${MANIFESTIMAGE}:amd64-${META_TAG} ${MANIFESTIMAGE}:amd64-${SEMVER}
+                      docker tag ${MANIFESTIMAGE}:arm32v7-${META_TAG} ${MANIFESTIMAGE}:arm32v7-${SEMVER}
+                      docker tag ${MANIFESTIMAGE}:arm64v8-${META_TAG} ${MANIFESTIMAGE}:arm64v8-${SEMVER}
+                    fi
                     docker push ${MANIFESTIMAGE}:amd64-${META_TAG}
                     docker push ${MANIFESTIMAGE}:arm32v7-${META_TAG}
                     docker push ${MANIFESTIMAGE}:arm64v8-${META_TAG}
@@ -838,9 +847,11 @@ pipeline {
                     docker push ${MANIFESTIMAGE}:amd64-${EXT_RELEASE_TAG}
                     docker push ${MANIFESTIMAGE}:arm32v7-${EXT_RELEASE_TAG}
                     docker push ${MANIFESTIMAGE}:arm64v8-${EXT_RELEASE_TAG}
-                    docker push ${MANIFESTIMAGE}:amd64-${SEMVER}
-                    docker push ${MANIFESTIMAGE}:arm32v7-${SEMVER}
-                    docker push ${MANIFESTIMAGE}:arm64v8-${SEMVER}
+                    if [ -n "${SEMVER}" ]; then
+                      docker push ${MANIFESTIMAGE}:amd64-${SEMVER}
+                      docker push ${MANIFESTIMAGE}:arm32v7-${SEMVER}
+                      docker push ${MANIFESTIMAGE}:arm64v8-${SEMVER}
+                    fi
                     docker manifest push --purge ${MANIFESTIMAGE}:latest || :
                     docker manifest create ${MANIFESTIMAGE}:latest ${MANIFESTIMAGE}:amd64-latest ${MANIFESTIMAGE}:arm32v7-latest ${MANIFESTIMAGE}:arm64v8-latest
                     docker manifest annotate ${MANIFESTIMAGE}:latest ${MANIFESTIMAGE}:arm32v7-latest --os linux --arch arm
@@ -853,14 +864,18 @@ pipeline {
                     docker manifest create ${MANIFESTIMAGE}:${EXT_RELEASE_TAG} ${MANIFESTIMAGE}:amd64-${EXT_RELEASE_TAG} ${MANIFESTIMAGE}:arm32v7-${EXT_RELEASE_TAG} ${MANIFESTIMAGE}:arm64v8-${EXT_RELEASE_TAG}
                     docker manifest annotate ${MANIFESTIMAGE}:${EXT_RELEASE_TAG} ${MANIFESTIMAGE}:arm32v7-${EXT_RELEASE_TAG} --os linux --arch arm
                     docker manifest annotate ${MANIFESTIMAGE}:${EXT_RELEASE_TAG} ${MANIFESTIMAGE}:arm64v8-${EXT_RELEASE_TAG} --os linux --arch arm64 --variant v8
-                    docker manifest push --purge ${MANIFESTIMAGE}:${SEMVER} || :
-                    docker manifest create ${MANIFESTIMAGE}:${SEMVER} ${MANIFESTIMAGE}:amd64-${SEMVER} ${MANIFESTIMAGE}:arm32v7-${SEMVER} ${MANIFESTIMAGE}:arm64v8-${SEMVER}
-                    docker manifest annotate ${MANIFESTIMAGE}:${SEMVER} ${MANIFESTIMAGE}:arm32v7-${SEMVER} --os linux --arch arm
-                    docker manifest annotate ${MANIFESTIMAGE}:${SEMVER} ${MANIFESTIMAGE}:arm64v8-${SEMVER} --os linux --arch arm64 --variant v8
+                    if [ -n "${SEMVER}" ]; then
+                      docker manifest push --purge ${MANIFESTIMAGE}:${SEMVER} || :
+                      docker manifest create ${MANIFESTIMAGE}:${SEMVER} ${MANIFESTIMAGE}:amd64-${SEMVER} ${MANIFESTIMAGE}:arm32v7-${SEMVER} ${MANIFESTIMAGE}:arm64v8-${SEMVER}
+                      docker manifest annotate ${MANIFESTIMAGE}:${SEMVER} ${MANIFESTIMAGE}:arm32v7-${SEMVER} --os linux --arch arm
+                      docker manifest annotate ${MANIFESTIMAGE}:${SEMVER} ${MANIFESTIMAGE}:arm64v8-${SEMVER} --os linux --arch arm64 --variant v8
+                    fi
                     docker manifest push --purge ${MANIFESTIMAGE}:latest
                     docker manifest push --purge ${MANIFESTIMAGE}:${META_TAG} 
                     docker manifest push --purge ${MANIFESTIMAGE}:${EXT_RELEASE_TAG} 
-                    docker manifest push --purge ${MANIFESTIMAGE}:${SEMVER} 
+                    if [ -n "${SEMVER}" ]; then
+                      docker manifest push --purge ${MANIFESTIMAGE}:${SEMVER} 
+                    fi
                   done
                '''
           }
@@ -870,15 +885,18 @@ pipeline {
                   ${DELETEIMAGE}:amd64-${META_TAG} \
                   ${DELETEIMAGE}:amd64-latest \
                   ${DELETEIMAGE}:amd64-${EXT_RELEASE_TAG} \
-                  ${DELETEIMAGE}:amd64-${SEMVER} \
                   ${DELETEIMAGE}:arm32v7-${META_TAG} \
                   ${DELETEIMAGE}:arm32v7-latest \
                   ${DELETEIMAGE}:arm32v7-${EXT_RELEASE_TAG} \
-                  ${DELETEIMAGE}:arm32v7-${SEMVER} \
                   ${DELETEIMAGE}:arm64v8-${META_TAG} \
                   ${DELETEIMAGE}:arm64v8-latest \
-                  ${DELETEIMAGE}:arm64v8-${EXT_RELEASE_TAG} \
-                  ${DELETEIMAGE}:arm64v8-${SEMVER} || :
+                  ${DELETEIMAGE}:arm64v8-${EXT_RELEASE_TAG} || :
+                  if [ -n "${SEMVER}" ]; then
+                    docker rmi \
+                    ${DELETEIMAGE}:amd64-${SEMVER} \
+                    ${DELETEIMAGE}:arm32v7-${SEMVER} \
+                    ${DELETEIMAGE}:arm64v8-${SEMVER} || :
+                  fi
                 done
                 docker rmi \
                 ghcr.io/linuxserver/lsiodev-buildcache:arm32v7-${COMMIT_SHA}-${BUILD_NUMBER} \
